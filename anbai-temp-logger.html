@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Anbai温度曲线分析仪</title>
+	<link rel="icon" type="image/x-icon" href="https://img.icons8.com/?size=60&id=ZhTUpZf8VQX2&format=png">
+	<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f1f5f9;
+            color: #0f172a;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* 左侧面板 */
+        .sidebar {
+            width: 340px;
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #eef2ff;
+            background: #ffffff;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .sidebar-header h2 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .upload-area {
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 12px;
+            text-align: center;
+            background: #f8fafc;
+            transition: 0.2s;
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+
+        .upload-area.drag-over {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+
+        .upload-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .upload-area p {
+            font-size: 0.8rem;
+            color: #334155;
+        }
+
+        .upload-area small {
+            color: #64748b;
+            font-size: 0.7rem;
+        }
+
+        .file-list {
+            margin-top: 8px;
+            max-height: 140px;
+            overflow-y: auto;
+            padding: 4px 6px;
+        }
+
+        .file-tag {
+            background: #f1f5f9;
+            border-radius: 20px;
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin: 4px 6px 4px 0;
+        }
+
+        .channels-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+        }
+
+        .file-group {
+            margin-bottom: 20px;
+            border-radius: 14px;
+            background: #fefefe;
+            border: 1px solid #e9edf2;
+            overflow: hidden;
+        }
+
+        .file-group-header {
+            background: #f9fafb;
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            border-bottom: 1px solid #eef2ff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .save-csv-btn {
+            background: #dcfce7;
+            border: none;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: #15803d;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .remove-file-btn {
+            background: #fee2e2;
+            border: none;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.7rem;
+            color: #b91c1c;
+            cursor: pointer;
+        }
+
+        .channel-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f3f5;
+            font-size: 0.75rem;
+        }
+
+        .channel-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+
+        .channel-number {
+            font-family: monospace;
+            font-weight: 600;
+            background: #eef2ff;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            min-width: 48px;
+            text-align: center;
+        }
+
+        .channel-name-input {
+            border: 1px solid #cbd5e1;
+            border-radius: 20px;
+            padding: 4px 8px;
+            font-size: 0.7rem;
+            width: 120px;
+            background: white;
+        }
+
+        .toggle-visibility {
+            width: 34px;
+            text-align: center;
+            cursor: pointer;
+            background: #eef2ff;
+            border-radius: 30px;
+            padding: 3px 0;
+            font-size: 0.65rem;
+        }
+
+        .btn-group {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* 右侧图表区 */
+        .chart-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #ffffff;
+            padding: 12px 16px 16px;
+            overflow: hidden;
+        }
+
+        /* 分页栏 */
+        .tabs-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 8px;
+            background: #f8fafc;
+            padding: 6px 12px 0 12px;
+            border-radius: 16px 16px 0 0;
+        }
+
+        .tab-btn {
+            background: #f1f5f9;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 20px 20px 8px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: 0.1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tab-btn.active {
+            background: white;
+            border-bottom: 2px solid #3b82f6;
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        .tab-close {
+            background: none;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            color: #94a3b8;
+            padding: 0 4px;
+        }
+
+        /* 折叠设置栏 */
+        .settings-wrapper {
+            background: #f8fafc;
+            border-radius: 20px;
+            margin-bottom: 12px;
+            border: 1px solid #e2edff;
+            overflow: hidden;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: #f1f5f9;
+            cursor: pointer;
+            user-select: none;
+            font-weight: 500;
+            font-size: 0.8rem;
+        }
+
+        .settings-header span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .collapse-icon {
+            transition: transform 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .settings-bar {
+            padding: 10px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            background: white;
+            border-top: 1px solid #eef2ff;
+            transition: all 0.2s;
+        }
+
+        .settings-bar.collapsed {
+            display: none;
+        }
+
+        .settings-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            background: #f9fafb;
+            padding: 4px 12px;
+            border-radius: 40px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .settings-group label {
+            font-weight: 500;
+            color: #1e293b;
+        }
+
+        select, input, button {
+            border-radius: 30px;
+            border: 1px solid #cbd5e1;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            background: white;
+            cursor: pointer;
+        }
+
+        .temp-range {
+            background: #fff7ed;
+            border-color: #fdba74;
+        }
+        .temp-range input {
+            width: 70px;
+        }
+
+        .chart-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        #chartContainer {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .info-tip {
+            font-size: 0.7rem;
+            color: #5b6e8c;
+            text-align: right;
+            margin-top: 8px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2>🌡️ 温度曲线分析 · 专业版</h2>
+            <div id="dropZone" class="upload-area">
+                <div class="upload-icon">📂</div>
+                <p>拖拽 CSV 文件 或 <strong>点击选择</strong></p>
+                <small>自动识别时间列之后的全部通道 | 左侧显示通道号(CH01..) | 备注名可导出CSV</small>
+                <input type="file" id="fileInput" multiple accept=".csv,.txt" style="display: none;" />
+            </div>
+            <div class="btn-group">
+                <button id="clearAllBtn">🗑️ 清空所有文件</button>
+            </div>
+        </div>
+        <div class="channels-container" id="channelsList">
+            <div style="text-align:center; color:#94a3b8; padding: 40px 0;">请上传文件，左侧会显示当前文件的通道号及备注</div>
+        </div>
+    </div>
+
+    <div class="chart-area">
+        <div class="tabs-container" id="tabsContainer"></div>
+        
+        <!-- 可折叠设置区 -->
+        <div class="settings-wrapper">
+            <div class="settings-header" id="collapseSettingsBtn">
+                <span>⚙️ 图表设置 & 温度标注</span>
+                <span class="collapse-icon" id="collapseIcon">▼</span>
+            </div>
+            <div class="settings-bar collapsed" id="settingsBar">
+                <div class="settings-group">
+                    <span>⏱️ 横坐标:</span>
+                    <select id="timeModeSelect">
+                        <option value="relative">相对时间 (全局零点)</option>
+                        <option value="absolute">绝对时间 (时:分:秒)</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <span>📏 Y轴网格间隔(°C):</span>
+                    <input type="number" id="gridInterval" value="5" step="1" style="width: 70px;">
+                    <button id="applyGridBtn">应用</button>
+                </div>
+                <div class="settings-group">
+                    <span>🎨 背景色:</span>
+                    <input type="color" id="bgColorPicker" value="#ffffff">
+                </div>
+                <div class="settings-group">
+                    <span>📊 标注:</span>
+                    <label><input type="checkbox" id="showMaxPoint"> 最大值</label>
+                    <label><input type="checkbox" id="showStartPoint"> 起始值</label>
+                </div>
+                <div class="settings-group temp-range">
+                    <span>🔥 温度范围高亮:</span>
+                    <input type="number" id="tempMin" placeholder="下限" step="0.1" value="">
+                    <span>~</span>
+                    <input type="number" id="tempMax" placeholder="上限" step="0.1" value="">
+                    <button id="applyTempRangeBtn">应用高亮</button>
+                    <button id="clearTempRangeBtn">清除</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-toolbar">
+            <button id="exportChartBtn">📸 导出为图片</button>
+            <button id="copyChartBtn">📋 复制到剪贴板</button>
+        </div>
+        <div id="chartContainer" style="height: 100%; width: 100%;"></div>
+    </div>
+</div>
+
+<script>
+    // ---------- 全局数据结构 ----------
+    let filesData = [];          // 每个文件: { id, fileName, channels, tempRangeMin, tempRangeMax, originalLines, headerLineIdx, headerColumns }
+    let nextFileId = 1;
+    let currentFileId = null;    
+    let chartInstance = null;
+    
+    // 全局设置
+    let currentTimeMode = 'relative';
+    let yGridInterval = 5;
+    let chartBgColor = '#ffffff';
+    let showMaxPoint = false;
+    let showStartPoint = false;
+    
+    // 辅助函数: 解析CSV行 (兼容引号)
+    function parseCSVLine(line) {
+        const result = [];
+        let current = "";
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') inQuotes = !inQuotes;
+            else if (ch === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = "";
+            } else current += ch;
+        }
+        result.push(current.trim());
+        return result;
+    }
+    
+    // 将数组转回CSV行 (处理可能的逗号/引号)
+    function encodeCSVRow(fields) {
+        return fields.map(field => {
+            if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+                return `"${field.replace(/"/g, '""')}"`;
+            }
+            return field;
+        }).join(',');
+    }
+    
+    // 核心解析: 自动识别时间列之后的全部列为通道 (通道名任意，并为每个通道分配序号)
+    function parseCSVToFileData(fileName, csvText) {
+        const lines = csvText.split(/\r?\n/);
+        if (lines.length < 5) throw new Error("文件内容过少");
+        
+        // 查找包含 DATE TIME 或 DATETIME 等时间列的表头行
+        let headerIndex = -1;
+        let headerColumns = [];
+        let dateTimeIdx = -1;
+        
+        for (let i = 0; i < Math.min(lines.length, 60); i++) {
+            const line = lines[i].trim();
+            if (line === "") continue;
+            const cols = parseCSVLine(line);
+            // 寻找包含 DATE TIME 或类似关键字的列
+            let foundDateTime = -1;
+            for (let j = 0; j < cols.length; j++) {
+                const upper = cols[j].toUpperCase();
+                if (upper.includes("DATE TIME") || upper === "DATETIME" || upper === "DATE_TIME" || upper === "DATE") {
+                    foundDateTime = j;
+                    break;
+                }
+            }
+            if (foundDateTime !== -1 && cols.length >= 4) {
+                headerIndex = i;
+                headerColumns = cols;
+                dateTimeIdx = foundDateTime;
+                break;
+            }
+        }
+        
+        if (headerIndex === -1) throw new Error("未找到包含时间列 (DATE TIME) 的表头行");
+        if (dateTimeIdx === -1) throw new Error("无法定位时间列索引");
+        
+        // 通道列: 时间列之后的所有非空列 (排除时间列及之前列)
+        const channelKeys = [];
+        const channelColIdx = {};
+        for (let i = dateTimeIdx + 1; i < headerColumns.length; i++) {
+            let colName = headerColumns[i].trim();
+            if (colName === "") continue;
+            channelKeys.push(colName);
+            channelColIdx[colName] = i;
+        }
+        
+        if (channelKeys.length === 0) throw new Error("未找到任何温度通道列 (时间列之后无数据列)");
+        
+        // 初始化通道数据结构
+        let channelDataMap = {};
+        channelKeys.forEach(ch => { channelDataMap[ch] = []; });
+        
+        // 解析数据行
+        for (let i = headerIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line === "") continue;
+            const cells = parseCSVLine(line);
+            if (cells.length <= dateTimeIdx) continue;
+            const dateTimeStr = cells[dateTimeIdx]?.trim();
+            if (!dateTimeStr) continue;
+            let dateObj = new Date(dateTimeStr);
+            if (isNaN(dateObj.getTime())) continue;
+            const timestamp = dateObj.getTime();
+            
+            for (let ch of channelKeys) {
+                const colIdx = channelColIdx[ch];
+                if (colIdx === undefined || colIdx >= cells.length) continue;
+                let rawVal = cells[colIdx].trim();
+                let numVal = parseFloat(rawVal);
+                // -1000 视为无效点 (传感器未接)
+                if (isNaN(numVal) || numVal === -1000) {
+                    channelDataMap[ch].push({ time: timestamp, value: null });
+                } else {
+                    channelDataMap[ch].push({ time: timestamp, value: numVal });
+                }
+            }
+        }
+        
+        // 构建channels对象 (过滤全无效通道) 并添加序号索引
+        let channels = {};
+        let chIndex = 1;  // 通道号从1开始 (CH01)
+        for (let origName of channelKeys) {
+            const points = channelDataMap[origName];
+            if (!points || points.length === 0) continue;
+            const hasValid = points.some(p => p.value !== null);
+            if (!hasValid) continue;
+            points.sort((a,b) => a.time - b.time);
+            channels[origName] = {
+                originalName: origName,
+                displayName: origName,      // 初始显示名为原始通道名，用户可修改备注
+                visible: true,
+                index: chIndex,             // 通道序号 (1,2,3...)
+                dataPoints: points
+            };
+            chIndex++;
+        }
+        
+        if (Object.keys(channels).length === 0) throw new Error("无有效温度数据 (全部为-1000或空)");
+        
+        // 保存原始文本行、表头索引、原始分割后的表头数组 (用于导出时修改)
+        return { 
+            fileName, 
+            channels, 
+            id: null, 
+            tempRangeMin: null, 
+            tempRangeMax: null,
+            originalLines: lines.slice(),          // 深拷贝原始行
+            headerLineIdx: headerIndex,
+            originalHeaderCols: headerColumns.slice()
+        };
+    }
+    
+    // 渲染左侧通道列表 (当前激活文件) —— 使用通道号 CH01, CH02...
+    function renderChannelsPanel() {
+        const container = document.getElementById('channelsList');
+        if (!currentFileId) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 40px 0;">请选择或上传文件</div>';
+            return;
+        }
+        const file = filesData.find(f => f.id === currentFileId);
+        if (!file) {
+            container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 40px 0;">文件不存在</div>';
+            return;
+        }
+        const chKeys = Object.keys(file.channels);
+        if (chKeys.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#ef4444;">无有效通道数据</div>';
+            return;
+        }
+        
+        let html = `<div class="file-group">
+                        <div class="file-group-header">
+                            <span>📁 ${escapeHtml(file.fileName)} (${chKeys.length}通道)</span>
+                            <div class="file-actions">
+                                <button class="save-csv-btn" id="saveCsvForCurrentFile">💾 保存备注名到CSV</button>
+                                <button class="remove-file-btn" id="removeCurrentFileBtn">✖ 移除文件</button>
+                            </div>
+                        </div>
+                        <div class="file-channels">`;
+        // 按序号排序展示
+        const sortedChannels = chKeys.map(key => ({ key, ch: file.channels[key] })).sort((a,b) => a.ch.index - b.ch.index);
+        for (let { key: chKey, ch } of sortedChannels) {
+            const channelNumber = `CH${String(ch.index).padStart(2, '0')}`;
+            html += `<div class="channel-item">
+                        <div class="channel-info">
+                            <span class="channel-number">${channelNumber}</span>
+                            <input type="text" class="channel-name-input" value="${escapeHtml(ch.displayName)}" data-chkey="${escapeHtml(chKey)}" placeholder="备注名 (曲线名称)">
+                            <div class="toggle-visibility" data-chkey="${escapeHtml(chKey)}" style="background: ${ch.visible ? '#dbeafe' : '#eef2ff'}">
+                                ${ch.visible ? '👁️' : '👁️‍🗨️'}
+                            </div>
+                        </div>
+                    </div>`;
+        }
+        html += `</div></div>`;
+        container.innerHTML = html;
+        
+        // 绑定保存CSV按钮 (当前文件导出)
+        const saveBtn = document.getElementById('saveCsvForCurrentFile');
+        if (saveBtn) saveBtn.addEventListener('click', () => exportCurrentFileWithRenamedChannels());
+        const removeBtn = document.getElementById('removeCurrentFileBtn');
+        if (removeBtn) removeBtn.addEventListener('click', () => { if(confirm('移除当前文件?')) removeFileById(currentFileId); });
+        
+        // 绑定通道备注修改与可见性事件
+        document.querySelectorAll('.channel-name-input').forEach(inp => {
+            inp.removeEventListener('change', handleNameChange);
+            inp.addEventListener('change', handleNameChange);
+        });
+        document.querySelectorAll('.toggle-visibility').forEach(el => {
+            el.removeEventListener('click', handleToggleVisibility);
+            el.addEventListener('click', handleToggleVisibility);
+        });
+    }
+    
+    function handleNameChange(e) {
+        const chKey = e.target.dataset.chkey;
+        const newName = e.target.value.trim();
+        if (!newName) return;
+        const file = filesData.find(f => f.id === currentFileId);
+        if (file && file.channels[chKey]) {
+            file.channels[chKey].displayName = newName;
+            renderChannelsPanel();    // 刷新显示（备注名更新）
+            updateChartForCurrentFile();
+        }
+    }
+    
+    function handleToggleVisibility(e) {
+        const chKey = e.currentTarget.dataset.chkey;
+        const file = filesData.find(f => f.id === currentFileId);
+        if (file && file.channels[chKey]) {
+            file.channels[chKey].visible = !file.channels[chKey].visible;
+            renderChannelsPanel();
+            updateChartForCurrentFile();
+        }
+    }
+    
+    // 导出当前文件的CSV (修改表头通道名为备注名)
+    function exportCurrentFileWithRenamedChannels() {
+        const file = filesData.find(f => f.id === currentFileId);
+        if (!file) { alert("无文件可导出"); return; }
+        
+        // 构建新的表头行
+        const newHeaderCols = [...file.originalHeaderCols];
+        // 遍历当前文件的channels，根据原始名找到列索引并替换为displayName
+        for (let [origName, chObj] of Object.entries(file.channels)) {
+            const colIndex = file.originalHeaderCols.findIndex(col => col === origName);
+            if (colIndex !== -1) {
+                newHeaderCols[colIndex] = chObj.displayName;
+            }
+        }
+        const newHeaderLine = encodeCSVRow(newHeaderCols);
+        // 生成新文件内容
+        let newLines = [...file.originalLines];
+        newLines[file.headerLineIdx] = newHeaderLine;
+        const newCsvContent = newLines.join('\n');
+        
+        // 下载
+        const blob = new Blob([newCsvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = file.fileName.replace(/\.csv$/i, '') + '_重命名通道.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        alert("✅ 已导出CSV，通道名已更新为备注名！");
+    }
+    
+    // 渲染分页栏
+    function renderTabs() {
+        const container = document.getElementById('tabsContainer');
+        if (filesData.length === 0) {
+            container.innerHTML = '<div style="padding: 6px 12px; color:#94a3b8;">暂无文件，请上传</div>';
+            return;
+        }
+        let html = '';
+        for (let file of filesData) {
+            const isActive = (currentFileId === file.id);
+            html += `<button class="tab-btn ${isActive ? 'active' : ''}" data-fileid="${file.id}">
+                        📄 ${escapeHtml(file.fileName.length > 18 ? file.fileName.slice(0,15)+'...' : file.fileName)}
+                        <span class="tab-close" data-fileid="${file.id}" data-close="true">✖</span>
+                    </button>`;
+        }
+        container.innerHTML = html;
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (e.target.classList.contains('tab-close') || e.target.dataset.close === 'true') {
+                    e.stopPropagation();
+                    const fileId = parseInt(btn.dataset.fileid);
+                    removeFileById(fileId);
+                } else {
+                    const fileId = parseInt(btn.dataset.fileid);
+                    switchToFile(fileId);
+                }
+            });
+        });
+    }
+    
+    function switchToFile(fileId) {
+        if (currentFileId === fileId) return;
+        currentFileId = fileId;
+        const file = filesData.find(f => f.id === fileId);
+        if (file) {
+            document.getElementById('tempMin').value = file.tempRangeMin !== null ? file.tempRangeMin : '';
+            document.getElementById('tempMax').value = file.tempRangeMax !== null ? file.tempRangeMax : '';
+        }
+        renderTabs();
+        renderChannelsPanel();
+        updateChartForCurrentFile();
+    }
+    
+    function removeFileById(fileId) {
+        const index = filesData.findIndex(f => f.id === fileId);
+        if (index !== -1) {
+            filesData.splice(index, 1);
+            if (filesData.length === 0) {
+                currentFileId = null;
+                if (chartInstance) chartInstance.clear();
+                renderTabs();
+                renderChannelsPanel();
+                return;
+            }
+            if (currentFileId === fileId) {
+                currentFileId = filesData[0].id;
+            }
+            renderTabs();
+            renderChannelsPanel();
+            updateChartForCurrentFile();
+        }
+    }
+    
+    // 绘图 (保留原所有功能 + 温度范围高亮 + 标注)
+    function updateChartForCurrentFile() {
+        if (!chartInstance) chartInstance = echarts.init(document.getElementById('chartContainer'));
+        if (!currentFileId) {
+            chartInstance.setOption({ title: { show: true, text: '请上传或选择一个文件', left: 'center', top: 'center' }, series: [] }, true);
+            return;
+        }
+        const file = filesData.find(f => f.id === currentFileId);
+        if (!file || Object.keys(file.channels).length === 0) {
+            chartInstance.setOption({ title: { show: true, text: '当前文件无有效通道数据', left: 'center', top: 'center' }, series: [] }, true);
+            return;
+        }
+        
+        let globalMinTime = Infinity;
+        let allYValues = [];
+        let visibleSeriesRaw = [];
+        for (const [chKey, ch] of Object.entries(file.channels)) {
+            if (!ch.visible) continue;
+            const points = ch.dataPoints;
+            if (!points.length) continue;
+            for (const pt of points) {
+                if (pt.time && pt.time < globalMinTime) globalMinTime = pt.time;
+                if (pt.value !== null) allYValues.push(pt.value);
+            }
+            visibleSeriesRaw.push({ ch, dataPoints: points, displayName: ch.displayName });
+        }
+        if (globalMinTime === Infinity) {
+            chartInstance.setOption({ title: { show: true, text: '无可视曲线', left: 'center', top: 'center' }, series: [] }, true);
+            return;
+        }
+        
+        let series = [];
+        for (let item of visibleSeriesRaw) {
+            let seriesData = [];
+            for (let pt of item.dataPoints) {
+                if (pt.value === null) {
+                    seriesData.push([null, null]);
+                    continue;
+                }
+                let xVal = (currentTimeMode === 'relative') ? (pt.time - globalMinTime) / 1000 : pt.time;
+                seriesData.push([xVal, pt.value]);
+            }
+            series.push({
+                name: item.displayName,
+                type: 'line',
+                data: seriesData,
+                smooth: false,
+                connectNulls: false,
+                showSymbol: false,
+                lineStyle: { width: 1.8 },
+                emphasis: { focus: 'series' }
+            });
+        }
+        
+        // 温度范围高亮 (markArea)
+        let markAreas = [];
+        const tempMin = file.tempRangeMin;
+        const tempMax = file.tempRangeMax;
+        if (tempMin !== null && tempMax !== null && tempMin <= tempMax) {
+            for (let item of visibleSeriesRaw) {
+                const points = item.dataPoints;
+                if (!points.length) continue;
+                let ranges = [];
+                let inRange = false;
+                let startIdx = -1;
+                for (let i = 0; i < points.length; i++) {
+                    const val = points[i].value;
+                    const isIn = (val !== null && val >= tempMin && val <= tempMax);
+                    if (isIn && !inRange) { inRange = true; startIdx = i; }
+                    else if (!isIn && inRange) {
+                        inRange = false;
+                        ranges.push({ start: startIdx, end: i-1 });
+                        startIdx = -1;
+                    }
+                }
+                if (inRange && startIdx !== -1) ranges.push({ start: startIdx, end: points.length-1 });
+                for (let range of ranges) {
+                    const startPoint = points[range.start];
+                    const endPoint = points[range.end];
+                    if (!startPoint || !endPoint) continue;
+                    let startX = (currentTimeMode === 'relative') ? (startPoint.time - globalMinTime)/1000 : startPoint.time;
+                    let endX = (currentTimeMode === 'relative') ? (endPoint.time - globalMinTime)/1000 : endPoint.time;
+                    const durationSec = (endPoint.time - startPoint.time) / 1000;
+                    const durationText = formatDuration(durationSec);
+                    markAreas.push({
+                        xAxis: Math.min(startX, endX),
+                        xAxisEnd: Math.max(startX, endX),
+                        label: { show: true, formatter: durationText, position: 'insideTop', color: '#dc2626', fontWeight: 'bold', fontSize: 10, backgroundColor: 'rgba(255,255,255,0.7)' },
+                        itemStyle: { color: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444', borderWidth: 1, borderType: 'dashed' }
+                    });
+                }
+            }
+        }
+        
+        const xAxisConfig = (currentTimeMode === 'relative') ? {
+            type: 'value', name: '相对时间 (秒) - 全局零点', axisLabel: { formatter: (val) => formatTimeFromSeconds(val) }, nameLocation: 'middle', nameGap: 35
+        } : {
+            type: 'time', name: '绝对时间', axisLabel: { formatter: (val) => new Date(val).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }), rotate: 30 }
+        };
+        
+        let yAxisConfig = { type: 'value', name: '温度 (°C)', axisLabel: { formatter: '{value} °C' }, splitLine: { show: true, lineStyle: { type: 'dashed', color: '#ccc' } } };
+        if (yGridInterval > 0 && allYValues.length) {
+            let minY = Math.min(...allYValues), maxY = Math.max(...allYValues);
+            let start = Math.floor(minY / yGridInterval) * yGridInterval;
+            let end = Math.ceil(maxY / yGridInterval) * yGridInterval;
+            yAxisConfig.min = start; yAxisConfig.max = end; yAxisConfig.interval = yGridInterval;
+        }
+        
+        let markPointData = [];
+        if (showMaxPoint || showStartPoint) {
+            for (let s of series) {
+                let validPoints = s.data.filter(p => p[0] !== null && p[1] !== null);
+                if (validPoints.length === 0) continue;
+                if (showMaxPoint) {
+                    let maxPoint = validPoints.reduce((a,b) => a[1] > b[1] ? a : b, validPoints[0]);
+                    markPointData.push({ name: s.name + ' 最大值', coord: [maxPoint[0], maxPoint[1]], value: maxPoint[1].toFixed(1)+'°C', symbol: 'circle', symbolSize: 8, label: { formatter: '{c}', position: 'top' } });
+                }
+                if (showStartPoint) {
+                    let startPoint = validPoints[0];
+                    markPointData.push({ name: s.name + ' 起始', coord: [startPoint[0], startPoint[1]], value: startPoint[1].toFixed(1)+'°C', symbol: 'diamond', symbolSize: 8, label: { formatter: '始 {c}', position: 'bottom' } });
+                }
+            }
+        }
+        
+        // 整合 markArea 到每个系列
+        let finalSeries = series.map(s => ({ ...s, markArea: markAreas.length ? { data: markAreas.map(ma => [ { xAxis: ma.xAxis }, { xAxis: ma.xAxisEnd, label: ma.label } ]), itemStyle: { color: 'rgba(239,68,68,0.15)', borderColor: '#ef4444' } } : undefined, markPoint: markPointData.length ? { data: markPointData } : undefined }));
+        
+        const option = {
+            backgroundColor: chartBgColor,
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: function(params) { if(!params||!params.length) return ''; let timeLabel = (currentTimeMode==='relative')?formatTimeFromSeconds(params[0].value[0]):new Date(params[0].value[0]).toLocaleTimeString(); let res=`<b>🕒 ${timeLabel}</b>`; params.forEach(p=>{ res+=`<div><span style="color:${p.color};">●</span> ${p.seriesName}: <b>${p.value[1]?.toFixed(1)}°C</b></div>`; }); return res; } },
+            legend: { type: 'scroll', left: 'left', top: 0, itemWidth: 25 },
+            grid: { left: '5%', right: '6%', bottom: '7%', top: '12%', containLabel: true },
+            xAxis: xAxisConfig, yAxis: yAxisConfig,
+            toolbox: { feature: { dataZoom: { yAxisIndex: 'none' }, restore: {}, saveAsImage: { title: '保存图片' } } },
+            dataZoom: [{ type: 'inside', start: 0, end: 100 }, { type: 'slider', start: 0, end: 100 }],
+            series: finalSeries
+        };
+        chartInstance.setOption(option, true);
+    }
+    
+    function formatDuration(sec) { if(sec<60) return `${Math.floor(sec)}秒`; let mins=Math.floor(sec/60), secs=Math.floor(sec%60); if(mins<60) return `${mins}分${secs}秒`; let hours=Math.floor(mins/60); mins=mins%60; return `${hours}时${mins}分${secs}秒`; }
+    function formatTimeFromSeconds(sec) { let h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=Math.floor(sec%60); return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`; }
+    
+    // 文件增删
+    async function addFile(fileObj) {
+        try {
+            const text = await fileObj.text();
+            const parsed = parseCSVToFileData(fileObj.name, text);
+            parsed.id = nextFileId++;
+            filesData.push(parsed);
+            if (!currentFileId) currentFileId = parsed.id;
+            else switchToFile(parsed.id);
+            renderTabs();
+            renderChannelsPanel();
+            updateChartForCurrentFile();
+        } catch (err) { alert(`文件 "${fileObj.name}" 解析失败: ${err.message}`); }
+    }
+    function addFiles(files) { for(let f of files) if(f.name.toLowerCase().endsWith('.csv')) addFile(f); else alert(`跳过非CSV: ${f.name}`); }
+    function clearAll() { if(filesData.length && confirm('清除所有文件?')){ filesData=[]; currentFileId=null; renderTabs(); renderChannelsPanel(); if(chartInstance) chartInstance.clear(); updateChartForCurrentFile(); } }
+    
+    function applyTempRange() { if(!currentFileId) return; let min=parseFloat(document.getElementById('tempMin').value), max=parseFloat(document.getElementById('tempMax').value); if(isNaN(min)||isNaN(max)){ alert('有效范围'); return; } let file=filesData.find(f=>f.id===currentFileId); if(file){ file.tempRangeMin=min; file.tempRangeMax=max; updateChartForCurrentFile(); } }
+    function clearTempRange() { if(!currentFileId) return; let file=filesData.find(f=>f.id===currentFileId); if(file){ file.tempRangeMin=null; file.tempRangeMax=null; document.getElementById('tempMin').value=''; document.getElementById('tempMax').value=''; updateChartForCurrentFile(); } }
+    function exportChartAsImage() { if(chartInstance){ let url=chartInstance.getDataURL({ type:'png', pixelRatio:2, backgroundColor:chartBgColor }); let a=document.createElement('a'); a.download=`temp_${currentFileId||'chart'}.png`; a.href=url; a.click(); } }
+    async function copyChartToClipboard() { if(!chartInstance) return; let canvas=chartInstance.getRenderedCanvas({ backgroundColor:chartBgColor }); if(canvas){ canvas.toBlob(async blob=>{ await navigator.clipboard.write([new ClipboardItem({[blob.type]:blob})]); alert('✅ 已复制'); }); } }
+    function escapeHtml(str){ if(!str) return ''; return str.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]||m)); }
+    
+    // 折叠功能
+    function initCollapse() {
+        const btn = document.getElementById('collapseSettingsBtn');
+        const bar = document.getElementById('settingsBar');
+        const icon = document.getElementById('collapseIcon');
+        let collapsed = true;
+        btn.addEventListener('click', () => {
+            collapsed = !collapsed;
+            if(collapsed) { bar.classList.add('collapsed'); icon.innerHTML = '▼'; }
+            else { bar.classList.remove('collapsed'); icon.innerHTML = '▲'; }
+        });
+    }
+    
+    function initUI() {
+        const dropZone = document.getElementById('dropZone'), fileInput = document.getElementById('fileInput');
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag-over'); });
+        dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag-over'));
+        dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(Array.from(e.dataTransfer.files)); });
+        fileInput.addEventListener('change', e=>{ if(e.target.files.length) addFiles(Array.from(e.target.files)); fileInput.value=''; });
+        document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+        document.getElementById('exportChartBtn').addEventListener('click', exportChartAsImage);
+        document.getElementById('copyChartBtn').addEventListener('click', copyChartToClipboard);
+        document.getElementById('applyTempRangeBtn').addEventListener('click', applyTempRange);
+        document.getElementById('clearTempRangeBtn').addEventListener('click', clearTempRange);
+        document.getElementById('timeModeSelect').addEventListener('change', e=>{ currentTimeMode=e.target.value; updateChartForCurrentFile(); });
+        document.getElementById('applyGridBtn').addEventListener('click', ()=>{ yGridInterval=parseFloat(document.getElementById('gridInterval').value)||0; updateChartForCurrentFile(); });
+        document.getElementById('bgColorPicker').addEventListener('input', e=>{ chartBgColor=e.target.value; updateChartForCurrentFile(); });
+        document.getElementById('showMaxPoint').addEventListener('change', e=>{ showMaxPoint=e.target.checked; updateChartForCurrentFile(); });
+        document.getElementById('showStartPoint').addEventListener('change', e=>{ showStartPoint=e.target.checked; updateChartForCurrentFile(); });
+        window.addEventListener('resize', ()=>chartInstance&&chartInstance.resize());
+        initCollapse();
+    }
+    
+    window.addEventListener('DOMContentLoaded', () => {
+        initUI();
+        chartInstance = echarts.init(document.getElementById('chartContainer'));
+        chartInstance.setOption({ title: { text: '等待上传文件', left: 'center', top: 'center' }, series: [] });
+    });
+</script>
+</body>
+</html>
