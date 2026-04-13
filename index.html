@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Anbai温度曲线分析仪</title>
-	<link rel="icon" type="image/x-icon" href="https://img.icons8.com/?size=60&id=ZhTUpZf8VQX2&format=png">
-	<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="icon" type="image/x-icon" href="https://img.icons8.com/?size=60&id=ZhTUpZf8VQX2&format=png">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -385,11 +385,11 @@
             <div id="dropZone" class="upload-area">
                 <div class="upload-icon">📂</div>
                 <p>拖拽 CSV 文件 或 <strong>点击选择</strong></p>
-                <!-- <small>自动识别时间列之后的全部通道 | 左侧显示通道号(CH01..) | 备注名可导出CSV</small> -->
                 <input type="file" id="fileInput" multiple accept=".csv,.txt" style="display: none;" />
             </div>
             <div class="btn-group">
                 <button id="clearAllBtn">🗑️ 清空所有文件</button>
+                <button id="clearCacheBtn">🗑️ 清除备注缓存</button>
             </div>
         </div>
         <div class="channels-container" id="channelsList">
@@ -448,6 +448,43 @@
 </div>
 
 <script>
+    // ---------- 缓存管理 ----------
+    const STORAGE_KEY = 'channelRemarks';
+    // 获取缓存映射 { "CH01": "备注名1", "CH02": "备注名2" }
+    function getRemarkCache() {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch(e) { return {}; }
+        }
+        return {};
+    }
+    // 保存单个通道备注
+    function setChannelRemark(channelNumber, remark) {
+        const cache = getRemarkCache();
+        if (remark && remark.trim() !== "") {
+            cache[channelNumber] = remark.trim();
+        } else {
+            delete cache[channelNumber];
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+    }
+    // 获取某个通道的缓存备注，如果没有则返回 null
+    function getChannelRemark(channelNumber) {
+        const cache = getRemarkCache();
+        return cache[channelNumber] || null;
+    }
+    // 清除所有缓存
+    function clearAllRemarksCache() {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+
+    // 判断通道名是否为默认格式 (CH01, CH02, ...)
+    function isDefaultChannelName(name) {
+        return /^CH\d{2}$/i.test(name);
+    }
+
     // ---------- 全局数据结构 ----------
     let filesData = [];          // 每个文件: { id, fileName, channels, tempRangeMin, tempRangeMax, originalLines, headerLineIdx, headerColumns }
     let nextFileId = 1;
@@ -573,9 +610,26 @@
             const hasValid = points.some(p => p.value !== null);
             if (!hasValid) continue;
             points.sort((a,b) => a.time - b.time);
+            
+            const channelNumber = `CH${String(chIndex).padStart(2, '0')}`;
+            let displayName = origName; // 默认显示原始名
+            
+            // 判断原始名是否为默认格式 (CH01, CH02...)，如果是则尝试从缓存中读取备注
+            if (isDefaultChannelName(origName)) {
+                const cachedRemark = getChannelRemark(channelNumber);
+                if (cachedRemark) {
+                    displayName = cachedRemark;
+                } else {
+                    displayName = origName; // 保持原始名（如CH01）
+                }
+            } else {
+                // 非默认格式，保持原始名，且不覆盖缓存（但用户后续修改会写入缓存）
+                displayName = origName;
+            }
+            
             channels[origName] = {
                 originalName: origName,
-                displayName: origName,      // 初始显示名为原始通道名，用户可修改备注
+                displayName: displayName,
                 visible: true,
                 index: chIndex,             // 通道序号 (1,2,3...)
                 dataPoints: points
@@ -632,7 +686,7 @@
             html += `<div class="channel-item">
                         <div class="channel-info">
                             <span class="channel-number">${channelNumber}</span>
-                            <input type="text" class="channel-name-input" value="${escapeHtml(ch.displayName)}" data-chkey="${escapeHtml(chKey)}" placeholder="备注名 (曲线名称)">
+                            <input type="text" class="channel-name-input" value="${escapeHtml(ch.displayName)}" data-chkey="${escapeHtml(chKey)}" data-channelnumber="${channelNumber}" placeholder="备注名 (曲线名称)">
                             <div class="toggle-visibility" data-chkey="${escapeHtml(chKey)}" style="background: ${ch.visible ? '#dbeafe' : '#eef2ff'}">
                                 ${ch.visible ? '👁️' : '👁️‍🗨️'}
                             </div>
@@ -661,11 +715,16 @@
     
     function handleNameChange(e) {
         const chKey = e.target.dataset.chkey;
+        const channelNumber = e.target.dataset.channelnumber;
         const newName = e.target.value.trim();
         if (!newName) return;
         const file = filesData.find(f => f.id === currentFileId);
         if (file && file.channels[chKey]) {
             file.channels[chKey].displayName = newName;
+            // 更新缓存：基于通道号 (CH01, CH02...)
+            if (channelNumber) {
+                setChannelRemark(channelNumber, newName);
+            }
             renderChannelsPanel();    // 刷新显示（备注名更新）
             updateChartForCurrentFile();
         }
@@ -937,6 +996,7 @@
     }
     function addFiles(files) { for(let f of files) if(f.name.toLowerCase().endsWith('.csv')) addFile(f); else alert(`跳过非CSV: ${f.name}`); }
     function clearAll() { if(filesData.length && confirm('清除所有文件?')){ filesData=[]; currentFileId=null; renderTabs(); renderChannelsPanel(); if(chartInstance) chartInstance.clear(); updateChartForCurrentFile(); } }
+    function clearCache() { if(confirm('清除所有通道备注缓存？这将删除所有保存的备注名。')){ clearAllRemarksCache(); alert('缓存已清除，刷新页面后重新加载文件将恢复原始通道名。'); } }
     
     function applyTempRange() { if(!currentFileId) return; let min=parseFloat(document.getElementById('tempMin').value), max=parseFloat(document.getElementById('tempMax').value); if(isNaN(min)||isNaN(max)){ alert('有效范围'); return; } let file=filesData.find(f=>f.id===currentFileId); if(file){ file.tempRangeMin=min; file.tempRangeMax=max; updateChartForCurrentFile(); } }
     function clearTempRange() { if(!currentFileId) return; let file=filesData.find(f=>f.id===currentFileId); if(file){ file.tempRangeMin=null; file.tempRangeMax=null; document.getElementById('tempMin').value=''; document.getElementById('tempMax').value=''; updateChartForCurrentFile(); } }
@@ -965,6 +1025,7 @@
         dropZone.addEventListener('drop', e=>{ e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(Array.from(e.dataTransfer.files)); });
         fileInput.addEventListener('change', e=>{ if(e.target.files.length) addFiles(Array.from(e.target.files)); fileInput.value=''; });
         document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+        document.getElementById('clearCacheBtn').addEventListener('click', clearCache);
         document.getElementById('exportChartBtn').addEventListener('click', exportChartAsImage);
         document.getElementById('copyChartBtn').addEventListener('click', copyChartToClipboard);
         document.getElementById('applyTempRangeBtn').addEventListener('click', applyTempRange);
